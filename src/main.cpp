@@ -181,6 +181,10 @@ void loop() {
       lastDebounceTime[i] = millis();  // Reset debounce timer
       lastState[i] = currentState;
       sendState(inputPins[i], currentState ? "HIGH" : "LOW");
+      Serial.print("Pin state changed for pin ");
+      Serial.println(String(inputPins[i]));
+      Serial.print(" State :");
+      Serial.println(currentState);
     }
   }
   delay(10);
