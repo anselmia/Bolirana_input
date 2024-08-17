@@ -15,17 +15,41 @@ const int numDigitalInputs = sizeof(digitalPins) / sizeof(digitalPins[0]);
 bool lastState[numDigitalInputs] = {0};  // Tracks the last state of each digital pin
 unsigned long lastDebounceTime[numDigitalInputs] = {0};
 
-int i2cAddress = 0x08; // I2C address of the slave (e.g., Raspberry Pi)
+int i2cAddress = 0x08; // I2C address of the ESP32 slave
+
+// Function to handle data received from master
+void receiveData(int byteCount) {
+  Serial.print("Received data: ");
+  while (Wire.available()) {
+    char c = Wire.read(); // Receive byte as a character
+    Serial.print(c); // Print the received byte
+  }
+  Serial.println();
+}
+
+// Function to handle requests from the master
+void requestData() {
+  for (int i = 0; i < numAdcInputs; i++) {
+    int adcValue = analogRead(adcPins[i]); // Read the ADC value
+    Wire.write(adcValue >> 8);  // Send high byte of ADC value
+    Wire.write(adcValue & 0xFF);  // Send low byte of ADC value
+  }
+  for (int i = 0; i < numDigitalInputs; i++) {
+    int currentState = digitalRead(digitalPins[i]);
+    Wire.write(currentState); // Send digital pin state (HIGH or LOW)
+  }
+}
 
 void setup() {
   Serial.begin(115200);
 
-  // Initialize I2C as master
-  Wire.begin(); // Default pins SDA (GPIO21), SCL (GPIO22)
+  // Initialize I2C as slave
+  Wire.begin(i2cAddress); // Set ESP32 as I2C slave with the specified address
+  Wire.onReceive(receiveData); // Register a function to handle incoming data from master
+  Wire.onRequest(requestData); // Register a function to handle requests from master
 
   // Initialize ADC pins
   for (int i = 0; i < numAdcInputs; i++) {
-    
     pinMode(adcPins[i], INPUT); // Initialize pins as inputs (ADC pins do not use INPUT_PULLUP)
   }
 
@@ -35,47 +59,7 @@ void setup() {
   }
 }
 
-void sendState(int pin, String state) {
-  Wire.beginTransmission(i2cAddress); // Begin I2C communication with the slave
-  Wire.write(pin);  // Send the pin number
-  Wire.write(state == "HIGH" ? 1 : 0); // Send digital pin state (HIGH or LOW as 1 or 0)
-  Wire.endTransmission(); // End I2C communication
-}
-
 void loop() {
-  // Check Digital Inputs
-  for (int i = 0; i < numDigitalInputs; i++) {
-    int currentState = digitalRead(digitalPins[i]);
-    if (currentState != lastState[i] && (millis() - lastDebounceTime[i] > debounceDelay)) {
-      lastDebounceTime[i] = millis();  // Reset debounce timer
-      lastState[i] = currentState;
-      sendState(digitalPins[i], currentState ? "HIGH" : "LOW");
-      Serial.print("Digital Pin state changed for pin ");
-      Serial.println(digitalPins[i]);
-      Serial.print(" State :");
-      Serial.println(currentState ? "HIGH" : "LOW");
-    }
-  }
-
-  // Check ADC Inputs
-  for (int i = 0; i < numAdcInputs; i++) {
-    int adcValue = analogRead(adcPins[i]); // Read the ADC value
-    float voltage = adcValue * (3.3 / 4095.0); // Convert ADC value to voltage
-
-    bool currentAdcState = (voltage > 2.5) ? HIGH : LOW;
-
-    if (currentAdcState != adcStates[i] && (millis() - lastAdcDebounceTime[i] > debounceDelay)) {
-      lastAdcDebounceTime[i] = millis();  // Reset debounce timer
-      adcStates[i] = currentAdcState;
-      sendState(adcPins[i], currentAdcState ? "HIGH" : "LOW");
-      Serial.print("ADC Pin state changed for pin ");
-      Serial.println(adcPins[i]);
-      Serial.print(" Voltage :");
-      Serial.println(voltage);
-      Serial.print(" State :");
-      Serial.println(currentAdcState ? "HIGH" : "LOW");
-    }
-  }
-
-  delay(10); // Delay to prevent rapid looping
+  // The loop is empty because the I2C slave will respond to requests and data received
+  // automatically using the registered functions.
 }
