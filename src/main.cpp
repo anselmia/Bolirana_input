@@ -77,7 +77,7 @@ void loop() {
   for (int i = 0; i < numAdcInputs; i++) {
     int adcValue = analogRead(adcPins[i]); // Read the ADC value
     float voltage = adcValue * (3.3 / 4095.0); // Convert ADC value to voltage
-    bool currentAdcState = (voltage < 1.5) ? HIGH : LOW; // Determine HIGH or LOW based on 2.5V threshold
+    bool currentAdcState = (voltage > 0.6 && voltage < 1.5) ? HIGH : LOW; // Determine HIGH or LOW based on 2.5V threshold
     
     if (currentAdcState != adcStates[i]) {
       if (millis() - lastAdcDebounceTime[i] > debounceDelay) {
