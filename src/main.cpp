@@ -77,13 +77,18 @@ void loop() {
   for (int i = 0; i < numAdcInputs; i++) {
     int adcValue = analogRead(adcPins[i]); // Read the ADC value
     float voltage = adcValue * (3.3 / 4095.0); // Convert ADC value to voltage
-    bool currentAdcState = (voltage > 2.5) ? HIGH : LOW; // Determine HIGH or LOW based on 2.5V threshold
+    bool currentAdcState = (voltage < 1.5) ? HIGH : LOW; // Determine HIGH or LOW based on 2.5V threshold
     
     if (currentAdcState != adcStates[i]) {
       if (millis() - lastAdcDebounceTime[i] > debounceDelay) {
         adcStates[i] = currentAdcState;  // Update state after debounce
         lastAdcDebounceTime[i] = millis();  // Reset debounce timer
-
+        Serial.print("Pin:"); 
+        Serial.print(adcPins[i]);
+        Serial.print(" Voltage:"); 
+        Serial.print(voltage);  
+        Serial.print("V");  
+        Serial.println();
         if (adcStates[i] == HIGH) {
           adcTriggered[i] = true;  // Mark the pin as triggered if it's HIGH
         }
