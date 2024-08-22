@@ -18,8 +18,9 @@ void receiveData(int byteCount) {
     char c = Wire.read(); // Read the data to clear the buffer
     Serial.print("Received data: ");
     Serial.println(c);  // Debugging - print received data
-    Wire.write("Hello");
   }
+  delay(5);
+  Wire.write("Hello");
 }
 
 // Function to handle requests from the master
