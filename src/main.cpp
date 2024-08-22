@@ -1,57 +1,83 @@
 #include <Arduino.h>
 #include <Wire.h>
 
-// Setup GPIOs for ADC
-const int adcPins[] = {32, 33, 34, 35, 36, 39, 25, 26}; // 8 ADC pins
-const int numAdcInputs = sizeof(adcPins) / sizeof(adcPins[0]);
-bool adcStates[numAdcInputs] = {0};  // Tracks the current state of each ADC pin
-bool adcTriggered[numAdcInputs] = {0};  // Tracks if the ADC pin has been triggered (sent as HIGH)
-unsigned long lastAdcDebounceTime[numAdcInputs] = {0};  // Debounce timers for ADC inputs
-const unsigned long debounceDelay = 50;  // Debounce time in milliseconds
-
 // Setup GPIOs for Digital Inputs
-const int digitalPins[] = {4, 5, 13, 14, 18, 19}; // 6 Digital input pins
+const int digitalPins[] = {0, 2, 4, 18, 32, 12, 13, 14, 15, 16, 17, 25, 23, 26, 27, 33, 34, 35, 36, 39, 19};
 const int numDigitalInputs = sizeof(digitalPins) / sizeof(digitalPins[0]);
-bool lastState[numDigitalInputs] = {0};  // Tracks the current state of each digital pin
-bool digitalTriggered[numDigitalInputs] = {0};  // Tracks if the digital pin has been triggered (sent as HIGH)
-unsigned long lastDebounceTime[numDigitalInputs] = {0};  // Debounce timers for digital inputs
+volatile bool digitalTriggered[numDigitalInputs] = {0};  // Tracks if the digital pin has been triggered
+volatile unsigned long lastTriggerTime[numDigitalInputs] = {0};  // Store last trigger time to manage debounce
+const unsigned long debounceDelay = 10;  // Reduced debounce time in milliseconds
+volatile bool lastEdgeWasRising[numDigitalInputs] = {false};  // Track the last detected edge for each pin
 
 int i2cAddress = 0x08; // I2C address of the ESP32 slave
 
 // Function to handle data received from master
 void receiveData(int byteCount) {
-  Serial.print("Received data: ");
-  while (Wire.available()) {
-    char c = Wire.read(); // Receive byte as a character
-    Serial.print(c); // Print the received byte
-  }
-  Serial.println();
+  // Minimal code to handle data reception from I2C master
 }
 
 // Function to handle requests from the master
 void requestData() {
-  for (int i = 0; i < numAdcInputs; i++) {
-    if (adcTriggered[i]) {
-      Wire.write(adcPins[i]);  // Send the pin number
-      Wire.write(HIGH);  // Send the state as HIGH
-      adcTriggered[i] = false;  // Reset the triggered state to LOW after being read
-      return; // Only send one state at a time
-    }
-  }
-
   for (int i = 0; i < numDigitalInputs; i++) {
     if (digitalTriggered[i]) {
       Wire.write(digitalPins[i]);  // Send the pin number
       Wire.write(HIGH);  // Send the state as HIGH
-      digitalTriggered[i] = false;  // Reset the triggered state to LOW after being read
+      digitalTriggered[i] = false;  // Reset the triggered state after being read
       return; // Only send one state at a time
     }
   }
-
+  
   // If no pin was triggered, send a neutral signal
   Wire.write(0xFF);  // Send a neutral pin number
   Wire.write(LOW);   // Send a neutral state (LOW)
 }
+
+// Interrupt service routine for pin state change
+void IRAM_ATTR handleInterrupt(int index) {
+  unsigned long currentTime = micros();  // Use micros for better resolution
+  if (currentTime - lastTriggerTime[index] > debounceDelay * 1000) {  // Convert debounceDelay to microseconds
+    int pinState = digitalRead(digitalPins[index]);
+
+    if (pinState == HIGH) {
+      // Detected a rising edge
+      lastEdgeWasRising[index] = true;
+    } else if (pinState == LOW && lastEdgeWasRising[index]) {
+      // Detected a falling edge after a rising edge
+      digitalTriggered[index] = true;
+      lastEdgeWasRising[index] = false;  // Reset for the next pulse
+    }
+
+    lastTriggerTime[index] = currentTime;
+  }
+}
+
+// Wrapper functions for attaching interrupts
+void IRAM_ATTR handleInterrupt0() { handleInterrupt(0); }
+void IRAM_ATTR handleInterrupt1() { handleInterrupt(1); }
+void IRAM_ATTR handleInterrupt2() { handleInterrupt(2); }
+void IRAM_ATTR handleInterrupt3() { handleInterrupt(3); }
+void IRAM_ATTR handleInterrupt4() { handleInterrupt(4); }
+void IRAM_ATTR handleInterrupt5() { handleInterrupt(5); }
+void IRAM_ATTR handleInterrupt6() { handleInterrupt(6); }
+void IRAM_ATTR handleInterrupt7() { handleInterrupt(7); }
+void IRAM_ATTR handleInterrupt8() { handleInterrupt(8); }
+void IRAM_ATTR handleInterrupt9() { handleInterrupt(9); }
+void IRAM_ATTR handleInterrupt10() { handleInterrupt(10); }
+void IRAM_ATTR handleInterrupt11() { handleInterrupt(11); }
+void IRAM_ATTR handleInterrupt12() { handleInterrupt(12); }
+void IRAM_ATTR handleInterrupt13() { handleInterrupt(13); }
+void IRAM_ATTR handleInterrupt14() { handleInterrupt(14); }
+void IRAM_ATTR handleInterrupt15() { handleInterrupt(15); }
+void IRAM_ATTR handleInterrupt16() { handleInterrupt(16); }
+void IRAM_ATTR handleInterrupt17() { handleInterrupt(17); }
+void IRAM_ATTR handleInterrupt18() { handleInterrupt(18); }
+void IRAM_ATTR handleInterrupt19() { handleInterrupt(19); }
+void IRAM_ATTR handleInterrupt20() { handleInterrupt(20); }
+void IRAM_ATTR handleInterrupt21() { handleInterrupt(21); }
+void IRAM_ATTR handleInterrupt22() { handleInterrupt(22); }
+void IRAM_ATTR handleInterrupt23() { handleInterrupt(23); }
+void IRAM_ATTR handleInterrupt24() { handleInterrupt(24); }
+void IRAM_ATTR handleInterrupt25() { handleInterrupt(25); }
 
 void setup() {
   Serial.begin(115200);
@@ -60,55 +86,53 @@ void setup() {
   Wire.begin(i2cAddress); // Set ESP32 as I2C slave with the specified address
   Wire.onReceive(receiveData); // Register a function to handle incoming data from master
   Wire.onRequest(requestData); // Register a function to handle requests from master
-
-  // Initialize ADC pins
-  for (int i = 0; i < numAdcInputs; i++) {
-    pinMode(adcPins[i], INPUT); // Initialize pins as inputs (ADC pins do not use INPUT_PULLUP)
-  }
-
-  // Initialize Digital Input pins
+  
+  // Initialize Digital Input pins with pull-up resistors and attach interrupts
   for (int i = 0; i < numDigitalInputs; i++) {
-    pinMode(digitalPins[i], INPUT_PULLUP); // Digital pins initialized with pull-up resistors
+    pinMode(digitalPins[i], INPUT_PULLUP);
+    // Attach interrupts based on the index
+    switch (i) {
+      case 0: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt0, CHANGE); break;
+      case 1: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt1, CHANGE); break;
+      case 2: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt2, CHANGE); break;
+      case 3: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt3, CHANGE); break;
+      case 4: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt4, CHANGE); break;
+      case 5: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt5, CHANGE); break;
+      case 6: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt6, CHANGE); break;
+      case 7: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt7, CHANGE); break;
+      case 8: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt8, CHANGE); break;
+      case 9: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt9, CHANGE); break;
+      case 10: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt10, CHANGE); break;
+      case 11: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt11, CHANGE); break;
+      case 12: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt12, CHANGE); break;
+      case 13: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt13, CHANGE); break;
+      case 14: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt14, CHANGE); break;
+      case 15: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt15, CHANGE); break;
+      case 16: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt16, CHANGE); break;
+      case 17: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt17, CHANGE); break;
+      case 18: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt18, CHANGE); break;
+      case 19: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt19, CHANGE); break;
+      case 20: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt20, CHANGE); break;
+      case 21: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt21, CHANGE); break;
+      case 22: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt22, CHANGE); break;
+      case 23: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt23, CHANGE); break;
+      case 24: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt24, CHANGE); break;
+      case 25: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt25, CHANGE); break;
+    }
   }
 }
 
 void loop() {
-  // Monitor ADC Inputs
-  for (int i = 0; i < numAdcInputs; i++) {
-    int adcValue = analogRead(adcPins[i]); // Read the ADC value
-    float voltage = adcValue * (3.3 / 4095.0); // Convert ADC value to voltage
-    bool currentAdcState = (voltage > 0.6 && voltage < 1.5) ? HIGH : LOW; // Determine HIGH or LOW based on 2.5V threshold
-    
-    if (currentAdcState != adcStates[i]) {
-      if (millis() - lastAdcDebounceTime[i] > debounceDelay) {
-        adcStates[i] = currentAdcState;  // Update state after debounce
-        lastAdcDebounceTime[i] = millis();  // Reset debounce timer
-        Serial.print("Pin:"); 
-        Serial.print(adcPins[i]);
-        Serial.print(" Voltage:"); 
-        Serial.print(voltage);  
-        Serial.print("V");  
-        Serial.println();
-        if (adcStates[i] == HIGH) {
-          adcTriggered[i] = true;  // Mark the pin as triggered if it's HIGH
-        }
-      }
-    }
-  }
-
-  // Monitor Digital Inputs
+  // Process any triggered events in the main loop
   for (int i = 0; i < numDigitalInputs; i++) {
-    int currentState = digitalRead(digitalPins[i]);
-
-    if (currentState != lastState[i]) {
-      if (millis() - lastDebounceTime[i] > debounceDelay) {
-        lastState[i] = currentState;  // Update state after debounce
-        lastDebounceTime[i] = millis();  // Reset debounce timer
-
-        if (lastState[i] == HIGH) {
-          digitalTriggered[i] = true;  // Mark the pin as triggered if it's HIGH
-        }
-      }
+    if (digitalTriggered[i]) {
+      // Log the state change
+      Serial.print("Pin:");
+      Serial.print(digitalPins[i]);
+      Serial.println(" Detected a Pulse (Rising followed by Falling)");
+      
+      // Reset the triggered state after processing
+      digitalTriggered[i] = false;
     }
   }
 }
