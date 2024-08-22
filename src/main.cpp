@@ -2,18 +2,24 @@
 #include <Wire.h>
 
 // Setup GPIOs for Digital Inputs
-const int digitalPins[] = {0, 2, 4, 18, 32, 12, 13, 14, 15, 16, 17, 25, 23, 26, 27, 33, 34, 35, 36, 39, 19};
+const int digitalPins[] = {4, 5,18, 32, 13, 14, 15, 16, 17, 25, 23, 26, 27, 33, 34, 35, 36, 39, 19};
 const int numDigitalInputs = sizeof(digitalPins) / sizeof(digitalPins[0]);
 volatile bool digitalTriggered[numDigitalInputs] = {0};  // Tracks if the digital pin has been triggered
 volatile unsigned long lastTriggerTime[numDigitalInputs] = {0};  // Store last trigger time to manage debounce
 const unsigned long debounceDelay = 10;  // Reduced debounce time in milliseconds
 volatile bool lastEdgeWasRising[numDigitalInputs] = {false};  // Track the last detected edge for each pin
-
+volatile bool i2cMasterDetected = false;
 int i2cAddress = 0x08; // I2C address of the ESP32 slave
 
-// Function to handle data received from master
 void receiveData(int byteCount) {
   // Minimal code to handle data reception from I2C master
+  i2cMasterDetected = true;  // Set the flag indicating the master is present
+  while (Wire.available()) {
+    char c = Wire.read(); // Read the data to clear the buffer
+    Serial.print("Received data: ");
+    Serial.println(c);  // Debugging - print received data
+    Wire.write("Hello");
+  }
 }
 
 // Function to handle requests from the master
@@ -79,6 +85,18 @@ void IRAM_ATTR handleInterrupt23() { handleInterrupt(23); }
 void IRAM_ATTR handleInterrupt24() { handleInterrupt(24); }
 void IRAM_ATTR handleInterrupt25() { handleInterrupt(25); }
 
+void waitForI2CMaster() {
+  Serial.println("Waiting for I2C master...");
+
+  // Loop until the I2C master sends the first message
+  while (!i2cMasterDetected) {
+    delay(100);  // Just a small delay to avoid spinning too fast in the loop
+    Serial.print(".");
+  }
+
+  Serial.println("\nI2C master detected. Proceeding...");
+}
+
 void setup() {
   Serial.begin(115200);
 
@@ -87,6 +105,9 @@ void setup() {
   Wire.onReceive(receiveData); // Register a function to handle incoming data from master
   Wire.onRequest(requestData); // Register a function to handle requests from master
   
+  // Wait for an I2C master to be present before proceeding
+  waitForI2CMaster();
+
   // Initialize Digital Input pins with pull-up resistors and attach interrupts
   for (int i = 0; i < numDigitalInputs; i++) {
     pinMode(digitalPins[i], INPUT_PULLUP);
@@ -120,6 +141,7 @@ void setup() {
       case 25: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt25, CHANGE); break;
     }
   }
+  Serial.println("Setup Finished");
 }
 
 void loop() {
@@ -130,9 +152,6 @@ void loop() {
       Serial.print("Pin:");
       Serial.print(digitalPins[i]);
       Serial.println(" Detected a Pulse (Rising followed by Falling)");
-      
-      // Reset the triggered state after processing
-      digitalTriggered[i] = false;
     }
   }
 }
