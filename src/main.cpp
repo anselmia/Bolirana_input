@@ -11,20 +11,9 @@ volatile bool lastEdgeWasRising[numDigitalInputs] = {false};  // Track the last 
 volatile bool i2cMasterDetected = false;
 int i2cAddress = 0x08; // I2C address of the ESP32 slave
 
-void receiveData(int byteCount) {
-  // Minimal code to handle data reception from I2C master
-  i2cMasterDetected = true;  // Set the flag indicating the master is present
-  while (Wire.available()) {
-    char c = Wire.read(); // Read the data to clear the buffer
-    Serial.print("Received data: ");
-    Serial.println(c);  // Debugging - print received data
-  }
-  delay(5);
-  Wire.write("Hello");
-}
-
 // Function to handle requests from the master
 void requestData() {
+  i2cMasterDetected = true;
   for (int i = 0; i < numDigitalInputs; i++) {
     if (digitalTriggered[i]) {
       Wire.write(digitalPins[i]);  // Send the pin number
@@ -103,7 +92,6 @@ void setup() {
 
   // Initialize I2C as slave
   Wire.begin(i2cAddress); // Set ESP32 as I2C slave with the specified address
-  Wire.onReceive(receiveData); // Register a function to handle incoming data from master
   Wire.onRequest(requestData); // Register a function to handle requests from master
   
   // Wait for an I2C master to be present before proceeding
