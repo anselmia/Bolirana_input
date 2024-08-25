@@ -1,141 +1,132 @@
 #include <Arduino.h>
 #include <Wire.h>
 
-// Setup GPIOs for Digital Inputs
-const int digitalPins[] = {4, 5, 18, 32, 13, 14, 15, 16, 17, 25, 23, 26, 27, 33, 34, 35, 36, 39, 2};
-const int numDigitalInputs = sizeof(digitalPins) / sizeof(digitalPins[0]);
-volatile bool digitalTriggered[numDigitalInputs] = {0};  // Tracks if the digital pin has been triggered
-volatile unsigned long lastTriggerTime[numDigitalInputs] = {0};  // Store last trigger time to manage debounce
-const unsigned long debounceDelay = 40;  // Reduced debounce time in milliseconds
-volatile bool lastEdgeWasRising[numDigitalInputs] = {false};  // Track the last detected edge for each pin
+// Setup GPIOs for Digital Inputs (photodiode)
+const int holePins[] = {4, 5, 18, 32, 13, 14, 15, 16, 17, 25, 23, 26, 27, 33};
+const int numPin = sizeof(holePins) / sizeof(holePins[0]);
+volatile bool pinTriggered[numPin] = {0};  // Tracks if the digital pin has been triggered
+volatile unsigned long lastTriggerTime[numPin] = {0};  // Store last trigger time to manage debounce
+const unsigned long debounceDelay = 40;  // Debounce time in microseconds for photodiode
+volatile bool lastEdgeWasRising[numPin] = {false};  // Track the last detected edge for each pin
+
 volatile bool i2cMasterDetected = false;
 int i2cAddress = 0x08; // I2C address of the ESP32 slave
 
-const int buttonPin = {19}; // GPIO for the button
-volatile bool buttonPressed = false;
-volatile unsigned long lastButtonPressTime = 0;
-const unsigned long buttonDebounceDelay = 200; // 200 ms debounce delay for the button
+// GPIOs for buttons
+const int buttonPin[] = {19, 35, 34, 39}; // GPIOs for the 4 buttons
+const int numButton = sizeof(buttonPin) / sizeof(buttonPin[0]);
+volatile bool buttonTriggered[numButton] = {0};  // Tracks if the digital pin has been triggered
+volatile unsigned long lastButtonTriggerTime[numButton] = {0};  // Store last trigger time to manage debounce
+volatile bool lastButtonEdgeWasRising[numButton] = {false};  // Track the last detected edge for each pin
+const unsigned long buttonDebounceDelay = 200000; // 200ms debounce delay for the button (in microseconds)
 
 // Function to handle requests from the master
 void requestData() {
   i2cMasterDetected = true;
-  for (int i = 0; i < numDigitalInputs; i++) {
-    if (digitalTriggered[i]) {
-      Wire.write(digitalPins[i]);  // Send the pin number
-      Wire.write(HIGH);  // Send the state as HIGH
-      digitalTriggered[i] = false;  // Reset the triggered state after being read
-      return; // Only send one state at a time
-    }
+  bool dataSent = false;
+
+  for (int i = 0; i < numPin; i++) {
+      if (pinTriggered[i]) {
+          Wire.write(holePins[i]);  // Send the pin number
+          Wire.write(HIGH);  // Send the state as HIGH
+          Serial.print("Sending holePin: ");
+          Serial.println(holePins[i]);
+          pinTriggered[i] = false;  // Reset the triggered state after being read
+          dataSent = true;
+          break; // Only send one state at a time
+      }
   }
-  
-  // If no pin was triggered, send a neutral signal
-  Wire.write(0xFF);  // Send a neutral pin number
-  Wire.write(LOW);   // Send a neutral state (LOW)
+
+  if (!dataSent) {
+      for (int i = 0; i < numButton; i++) {
+          if (buttonTriggered[i]) {
+              Wire.write(buttonPin[i]);  // Send the pin number
+              Wire.write(HIGH);  // Send the state as HIGH
+              Serial.print("Sending buttonPin: ");
+              Serial.println(buttonPin[i]);
+              buttonTriggered[i] = false;  // Reset the triggered state after being read
+              dataSent = true;
+              break; // Only send one state at a time
+          }
+      }
+  }
+
+  if (!dataSent) {
+      // If no pin was triggered, send a neutral signal
+      Wire.write(0xFF);  // Send a neutral pin number
+      Wire.write(LOW);   // Send a neutral state (LOW)
+  }
 }
 
-// Interrupt service routine for pin state change
-void IRAM_ATTR handleInterrupt(int index) {
+// Interrupt service routine for pin state change (photodiode detection)
+void IRAM_ATTR handlePinInterrupt(int index) {
   unsigned long currentTime = micros();  // Use micros for better resolution
 
-  // Check debounce time based on the pin index (pin 35 gets a longer debounce time)
+  if (currentTime - lastTriggerTime[index] > debounceDelay) {
+    int pinState = digitalRead(holePins[index]);
 
-  if (currentTime - lastTriggerTime[index] > debounceDelay) {  // Convert debounceDelay to microseconds
-    int pinState = digitalRead(digitalPins[index]);
-
-    if (pinState == LOW) {
-      // Detected a rising edge
+    if (pinState == LOW && !lastEdgeWasRising[index]) {
       lastEdgeWasRising[index] = true;
     } else if (pinState == HIGH && lastEdgeWasRising[index]) {
-      // Detected a falling edge after a rising edge
-      digitalTriggered[index] = true;
-      lastEdgeWasRising[index] = false;  // Reset for the next pulse
+      pinTriggered[index] = true;
+      lastEdgeWasRising[index] = false;
     }
 
     lastTriggerTime[index] = currentTime;
   }
 }
 
-void IRAM_ATTR handleButtonInterrupt() {
-    unsigned long currentTime = millis();  // Use millis for debounce timing
-    if (currentTime - lastButtonPressTime > buttonDebounceDelay) {
-        int buttonState = digitalRead(buttonPin);
-        if (buttonState == LOW) {
-            buttonPressed = true;  // Mark button as pressed
-        }
-        lastButtonPressTime = currentTime;
+// Interrupt service routine for button press
+void IRAM_ATTR handleButtonInterrupt(int index) {
+  unsigned long currentTime = micros();  // Use micros for better resolution
+
+  if (currentTime - lastButtonTriggerTime[index] > buttonDebounceDelay) {
+    int pinState = digitalRead(buttonPin[index]);
+
+    if (pinState == LOW && !lastButtonEdgeWasRising[index]) {
+      lastButtonEdgeWasRising[index] = true;
+    } else if (pinState == HIGH && lastButtonEdgeWasRising[index]) {
+      buttonTriggered[index] = true;
+      lastButtonEdgeWasRising[index] = false;
     }
+
+    lastButtonTriggerTime[index] = currentTime;  // Corrected variable name
+  }
 }
 
-// Wrapper functions for attaching interrupts
-void IRAM_ATTR handleInterrupt0() { handleInterrupt(0); }
-void IRAM_ATTR handleInterrupt1() { handleInterrupt(1); }
-void IRAM_ATTR handleInterrupt2() { handleInterrupt(2); }
-void IRAM_ATTR handleInterrupt3() { handleInterrupt(3); }
-void IRAM_ATTR handleInterrupt4() { handleInterrupt(4); }
-void IRAM_ATTR handleInterrupt5() { handleInterrupt(5); }
-void IRAM_ATTR handleInterrupt6() { handleInterrupt(6); }
-void IRAM_ATTR handleInterrupt7() { handleInterrupt(7); }
-void IRAM_ATTR handleInterrupt8() { handleInterrupt(8); }
-void IRAM_ATTR handleInterrupt9() { handleInterrupt(9); }
-void IRAM_ATTR handleInterrupt10() { handleInterrupt(10); }
-void IRAM_ATTR handleInterrupt11() { handleInterrupt(11); }
-void IRAM_ATTR handleInterrupt12() { handleInterrupt(12); }
-void IRAM_ATTR handleInterrupt13() { handleInterrupt(13); }
-void IRAM_ATTR handleInterrupt14() { handleInterrupt(14); }
-void IRAM_ATTR handleInterrupt15() { handleInterrupt(15); }  // Pin 35
-void IRAM_ATTR handleInterrupt16() { handleInterrupt(16); }
-void IRAM_ATTR handleInterrupt17() { handleInterrupt(17); }
-void IRAM_ATTR handleInterrupt18() { handleInterrupt(18); }
-void IRAM_ATTR handleInterrupt19() { handleInterrupt(19); }
-void IRAM_ATTR handleInterrupt20() { handleInterrupt(20); }
-void IRAM_ATTR handleInterrupt21() { handleInterrupt(21); }
-void IRAM_ATTR handleInterrupt22() { handleInterrupt(22); }
-void IRAM_ATTR handleInterrupt23() { handleInterrupt(23); }
-void IRAM_ATTR handleInterrupt24() { handleInterrupt(24); }
-void IRAM_ATTR handleInterrupt25() { handleInterrupt(25); }
+// Generic interrupt handler for photodiode pins
+void IRAM_ATTR handleGenericPinInterrupt(void* arg) {
+    int index = (int)arg;  // Cast the argument to an integer
+    handlePinInterrupt(index);
+}
+
+// Generic interrupt handler for buttons
+void IRAM_ATTR handleGenericButtonInterrupt(void* arg) {
+    int index = (int)arg;  // Cast the argument to an integer
+    handleButtonInterrupt(index);
+}
 
 void setup() {
   Serial.begin(115200);
 
   // Initialize I2C as slave
-  Wire.begin(i2cAddress); // Set ESP32 as I2C slave with the specified address
-  Wire.onRequest(requestData); // Register a function to handle requests from master
+  Wire.begin(i2cAddress);
+  Wire.onRequest(requestData);
 
   // Initialize Digital Input pins with pull-up resistors and attach interrupts
-  for (int i = 0; i < numDigitalInputs; i++) {
-    pinMode(digitalPins[i], INPUT_PULLUP);
-    // Attach interrupts based on the index
-    switch (i) {
-      case 0: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt0, CHANGE); break;
-      case 1: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt1, CHANGE); break;
-      case 2: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt2, CHANGE); break;
-      case 3: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt3, CHANGE); break;
-      case 4: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt4, CHANGE); break;
-      case 5: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt5, CHANGE); break;
-      case 6: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt6, CHANGE); break;
-      case 7: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt7, CHANGE); break;
-      case 8: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt8, CHANGE); break;
-      case 9: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt9, CHANGE); break;
-      case 10: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt10, CHANGE); break;
-      case 11: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt11, CHANGE); break;
-      case 12: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt12, CHANGE); break;
-      case 13: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt13, CHANGE); break;
-      case 14: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt14, CHANGE); break;
-      case 15: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt15, CHANGE); break;  // Pin 35
-      case 16: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt16, CHANGE); break;
-      case 17: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt17, CHANGE); break;
-      case 18: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt18, CHANGE); break;
-      case 19: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt19, CHANGE); break;
-      case 20: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt20, CHANGE); break;
-      case 21: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt21, CHANGE); break;
-      case 22: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt22, CHANGE); break;
-      case 23: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt23, CHANGE); break;
-      case 24: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt24, CHANGE); break;
-      case 25: attachInterrupt(digitalPinToInterrupt(digitalPins[i]), handleInterrupt25, CHANGE); break;
-    }
+  for (int i = 0; i < numPin; i++) {
+      pinMode(holePins[i], INPUT_PULLUP);
+      attachInterruptArg(digitalPinToInterrupt(holePins[i]), handleGenericPinInterrupt, (void*)i, CHANGE);
   }
+
+  for (int i = 0; i < numButton; i++) {
+      pinMode(buttonPin[i], INPUT_PULLUP);
+      attachInterruptArg(digitalPinToInterrupt(buttonPin[i]), handleGenericButtonInterrupt, (void*)i, CHANGE);
+  }
+
   Serial.println("Setup Finished");
 }
 
 void loop() {
+  // The main loop is empty since all the work is done in ISRs and I2C communication
 }
