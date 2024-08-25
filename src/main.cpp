@@ -17,19 +17,18 @@ const int buttonPin[] = {19, 35, 34, 39}; // GPIOs for the 4 buttons
 const int numButton = sizeof(buttonPin) / sizeof(buttonPin[0]);
 volatile bool buttonTriggered[numButton] = {0};  // Tracks if the digital pin has been triggered
 unsigned long lastButtonTriggerTime[numButton] = {0};  // Store last trigger time to manage debounce
-const unsigned long buttonDebounceDelay = 50000; // 50ms debounce delay
+const unsigned long buttonDebounceDelay = 100000; // 100ms debounce delay
+int lastButtonState[numButton] = {HIGH};  // Store the last stable state
+int currentButtonState[numButton];  // Store the current read state
 
 // Function to handle requests from the master
 void requestData() {
-    i2cMasterDetected = true;
     bool dataSent = false;
 
     for (int i = 0; i < numPin; i++) {
         if (pinTriggered[i]) {
             Wire.write(holePins[i]);  // Send the pin number
             Wire.write(HIGH);  // Send the state as HIGH
-            Serial.print("Sending holePin: ");
-            Serial.println(holePins[i]);
             pinTriggered[i] = false;  // Reset the triggered state after being read
             dataSent = true;
             break; // Only send one state at a time
@@ -41,8 +40,6 @@ void requestData() {
             if (buttonTriggered[i]) {
                 Wire.write(buttonPin[i]);  // Send the pin number
                 Wire.write(HIGH);  // Send the state as HIGH
-                Serial.print("Sending buttonPin: ");
-                Serial.println(buttonPin[i]);
                 buttonTriggered[i] = false;  // Reset the triggered state after being read
                 dataSent = true;
                 break; // Only send one state at a time
@@ -94,6 +91,7 @@ void setup() {
         attachInterruptArg(digitalPinToInterrupt(holePins[i]), handleGenericPinInterrupt, (void*)i, CHANGE);
     }
 
+    // Initialize button pins with pull-up resistors
     for (int i = 0; i < numButton; i++) {
         pinMode(buttonPin[i], INPUT_PULLUP);
     }
@@ -103,15 +101,25 @@ void setup() {
 
 void loop() {
     for (int i = 0; i < numButton; i++) {
-        int pinState = digitalRead(buttonPin[i]);
+        int reading = digitalRead(buttonPin[i]);
 
-        if (pinState == LOW && (micros() - lastButtonTriggerTime[i]) > buttonDebounceDelay) {
-            buttonTriggered[i] = true;
-            lastButtonTriggerTime[i] = micros();  // Update the last trigger time
-            Serial.print("Button pressed on pin: ");
-            Serial.println(buttonPin[i]);
+        // If the current reading is different from the last stable state, reset the timer
+        if (reading != lastButtonState[i]) {
+            lastButtonTriggerTime[i] = micros();
         }
-    }
 
-    // Add any other logic needed to process button presses
+        // If the state has been stable for longer than the debounce delay, consider it as the new state
+        if ((micros() - lastButtonTriggerTime[i]) > buttonDebounceDelay) {
+            if (reading != currentButtonState[i]) {
+                currentButtonState[i] = reading;
+
+                // Only trigger on a falling edge (button press)
+                if (currentButtonState[i] == LOW) {
+                    buttonTriggered[i] = true;
+                }
+            }
+        }
+
+        lastButtonState[i] = reading;  // Update the last stable state
+    }
 }
