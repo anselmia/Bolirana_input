@@ -6,7 +6,7 @@ const int holePins[] = {4, 5, 18, 32, 13, 14, 15, 16, 17, 25, 23, 26, 27, 33};
 const int numPin = sizeof(holePins) / sizeof(holePins[0]);
 volatile bool pinTriggered[numPin] = {0};  // Tracks if the digital pin has been triggered
 volatile unsigned long lastTriggerTime[numPin] = {0};  // Store last trigger time to manage debounce
-const unsigned long debounceDelay = 40;  // Debounce time in microseconds for photodiode
+const unsigned long debounceDelay = 500;  // Debounce time in microseconds for photodiode
 volatile bool lastEdgeWasRising[numPin] = {false};  // Track the last detected edge for each pin
 
 volatile bool i2cMasterDetected = false;
