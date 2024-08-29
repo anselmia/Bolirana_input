@@ -2,18 +2,18 @@
 #include <Wire.h>
 
 // Setup GPIOs for Digital Inputs (photodiode)
-const int holePins[] = {4, 5, 18, 32, 13, 14, 15, 16, 17, 25, 23, 26, 27, 33};
+const int holePins[] = { 5, 18, 32, 13, 14, 15, 16, 17, 25, 23, 26, 27, 33};
 const int numPin = sizeof(holePins) / sizeof(holePins[0]);
 volatile bool pinTriggered[numPin] = {0};  // Tracks if the digital pin has been triggered
 volatile unsigned long lastTriggerTime[numPin] = {0};  // Store last trigger time to manage debounce
-const unsigned long debounceDelay = 500;  // Debounce time in microseconds for photodiode
+const unsigned long debounceDelay = 50;  // Debounce time in microseconds for photodiode
 volatile bool lastEdgeWasRising[numPin] = {false};  // Track the last detected edge for each pin
 
 volatile bool i2cMasterDetected = false;
 int i2cAddress = 0x08; // I2C address of the ESP32 slave
 
 // GPIOs for buttons
-const int buttonPin[] = {19, 35, 34, 39}; // GPIOs for the 4 buttons
+const int buttonPin[] = {19, 0, 12}; // GPIOs for the 4 buttons
 const int numButton = sizeof(buttonPin) / sizeof(buttonPin[0]);
 volatile bool buttonTriggered[numButton] = {0};  // Tracks if the digital pin has been triggered
 unsigned long lastButtonTriggerTime[numButton] = {0};  // Store last trigger time to manage debounce
