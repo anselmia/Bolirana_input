@@ -21,6 +21,9 @@ const unsigned long buttonDebounceDelay = 100000; // 100ms debounce delay
 int lastButtonState[numButton] = {HIGH};  // Store the last stable state
 int currentButtonState[numButton];  // Store the current read state
 
+const int delayStartTime = 30000;  // Delay time in milliseconds (e.g., 5000 ms = 5 seconds)
+
+
 // Function to handle requests from the master
 void requestData() {
     bool dataSent = false;
@@ -80,7 +83,7 @@ void IRAM_ATTR handleGenericPinInterrupt(void* arg) {
 
 void setup() {
     Serial.begin(115200);
-
+    delay(delayStartTime);  // Delay for the specified time
     // Initialize I2C as slave
     Wire.begin(i2cAddress);
     Wire.onRequest(requestData);
